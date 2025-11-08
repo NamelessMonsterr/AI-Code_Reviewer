@@ -1,9 +1,9 @@
-import './fetch-polyfill.js'
+import './fetch-polyfill'
 
 import * as core from '@actions/core'
 import * as openai from 'chatgpt'
-import * as optionsJs from './options.js'
-import * as utils from './utils.js'
+import * as optionsJs from './options'
+import * as utils from './utils'
 
 // define type to save parentMessageId and conversationId
 export type Ids = {
@@ -12,7 +12,7 @@ export type Ids = {
 }
 
 export class Bot {
-  private api: openai.ChatGPTAPI | null = null // not free
+  private api: openai.ChatGPTAPI | null = null
 
   private options: optionsJs.Options
 
@@ -30,7 +30,7 @@ export class Bot {
       })
     } else {
       const err =
-        "Unable to initialize the OpenAI API, both 'OPENAI_API_KEY' environment variable are not available"
+        "Unable to initialize the OpenAI API, 'OPENAI_API_KEY' environment variable is not available"
       throw new Error(err)
     }
   }
@@ -39,16 +39,18 @@ export class Bot {
     let new_ids: Ids = {}
     let response = ''
     try {
-      ;[response, new_ids] = await this.chat_(message, ids)
-    } catch (e: any) {
-      core.warning(`Failed to chat: ${e}, backtrace: ${e.stack}`)
-    } finally {
-      return [response, new_ids]
+      const result = await this.chat_(message, ids)
+      response = result[0]
+      new_ids = result[1]
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorStack = error instanceof Error ? error.stack : ''
+      core.warning(`Failed to chat: ${errorMessage}, backtrace: ${errorStack}`)
     }
+    return [response, new_ids]
   }
 
   private chat_ = async (message: string, ids: Ids): Promise<[string, Ids]> => {
-    // record timing
     const start = Date.now()
     if (!message) {
       return ['', {}]
@@ -72,9 +74,11 @@ export class Bot {
           [message, opts],
           this.options.openai_retries
         )
-      } catch (e: any) {
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        const errorStack = error instanceof Error ? error.stack : ''
         core.info(
-          `response: ${response}, failed to stringify: ${e}, backtrace: ${e.stack}`
+          `response: ${response}, failed to stringify: ${errorMessage}, backtrace: ${errorStack}`
         )
       }
       const end = Date.now()
