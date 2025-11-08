@@ -1,4 +1,4 @@
-import openai
+from openai import OpenAI
 import os
 from typing import List, Dict
 import numpy as np
@@ -8,16 +8,18 @@ class SemanticCodeSearch:
     
     def __init__(self):
         self.api_key = os.getenv('OPENAI_API_KEY')
-        openai.api_key = self.api_key
+        if not self.api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+        self.client = OpenAI(api_key=self.api_key)
         self.code_embeddings = {}
     
     def generate_embedding(self, code: str) -> List[float]:
         """Generate embedding vector for code"""
-        response = openai.Embedding.create(
+        response = self.client.embeddings.create(
             model='text-embedding-ada-002',
             input=code
         )
-        return response['data'][0]['embedding']
+        return response.data[0].embedding
     
     def index_codebase(self, files: Dict[str, str]):
         """Index entire codebase for semantic search"""
@@ -44,7 +46,6 @@ class SemanticCodeSearch:
                 'code': data['code']
             })
         
-        # Sort by similarity
         similarities.sort(key=lambda x: x['similarity'], reverse=True)
         return similarities[:top_k]
     
