@@ -1,4 +1,4 @@
-import openai
+from openai import OpenAI
 import os
 from typing import List, Dict
 
@@ -7,7 +7,9 @@ class InteractiveChatbot:
     
     def __init__(self):
         self.api_key = os.getenv('OPENAI_API_KEY')
-        openai.api_key = self.api_key
+        if not self.api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+        self.client = OpenAI(api_key=self.api_key)
         self.conversation_history = []
     
     def start_conversation(self, code_context: str, issue: str):
@@ -30,7 +32,7 @@ class InteractiveChatbot:
             'content': question
         })
         
-        response = openai.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model='gpt-4',
             messages=self.conversation_history,
             temperature=0.3,
@@ -60,7 +62,7 @@ Provide:
 3. How to fix it
 4. Best practices to avoid it"""
         
-        response = openai.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model='gpt-4',
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.2
@@ -79,7 +81,7 @@ For each alternative, explain:
 - Pros and cons
 - Performance implications"""
         
-        response = openai.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model='gpt-4',
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.4
