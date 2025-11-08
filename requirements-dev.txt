@@ -1,68 +1,18 @@
-# ==============================================
-# Development Dependencies
-# ==============================================
-
-# Include all production dependencies
+# Include production dependencies
 -r requirements.txt
 
-# ==========================================
-# Testing Framework
-# ==========================================
+# Testing
 pytest==7.4.3
 pytest-cov==4.1.0
 pytest-asyncio==0.21.1
 pytest-mock==3.12.0
-pytest-xdist==3.5.0
-pytest-timeout==2.2.0
-pytest-env==1.1.3
-
-# ==========================================
-# Test Utilities
-# ==========================================
 httpx==0.25.2
 fakeredis==2.20.1
-factory-boy==3.3.0
-faker==21.0.0
-freezegun==1.4.0
 
-# ==========================================
-# Code Quality & Formatting
-# ==========================================
+# Code Quality
 black==23.12.1
 isort==5.13.2
 flake8==7.0.0
-flake8-docstrings==1.7.0
-autopep8==2.0.4
 
-# ==========================================
 # Type Checking
-# ==========================================
 mypy==1.7.1
-types-requests==2.31.0.10
-types-redis==4.6.0.11
-types-pyyaml==6.0.12.12
-
-# ==========================================
-# Security & Code Analysis
-# ==========================================
-bandit==1.7.5
-safety==3.0.1
-
-# ==========================================
-# Development Tools
-# ==========================================
-ipython==8.18.1
-ipdb==0.13.13
-watchdog==3.0.0
-pre-commit==3.6.0
-
-# ==========================================
-# Documentation
-# ==========================================
-mkdocs==1.5.3
-mkdocs-material==9.5.3
-
-# ==========================================
-# Coverage
-# ==========================================
-coverage[toml]==7.3.4
