@@ -20,6 +20,7 @@ htmlcov/
 .idea/
 *.swp
 *.swo
+.DS_Store
 
 # Environment
 .env
@@ -33,10 +34,11 @@ logs/
 *.db
 *.sqlite3
 
-# TypeScript (excluded)
+# TypeScript (excluded from Python project)
 *.ts
 *.js
 !jest.config.js
 node_modules/
 dist/
 tsconfig.json
+package-lock.json
