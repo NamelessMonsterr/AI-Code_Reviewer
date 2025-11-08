@@ -1,0 +1,36 @@
+# Custom Rules Configuration
+
+naming_conventions:
+  python:
+    class_name: '^[A-Z][a-zA-Z0-9]*$'
+    function_name: '^[a-z_][a-z0-9_]*$'
+    constant_name: '^[A-Z_][A-Z0-9_]*$'
+  
+  javascript:
+    class_name: '^[A-Z][a-zA-Z0-9]*$'
+    function_name: '^[a-z][a-zA-Z0-9]*$'
+
+forbidden_patterns:
+  python:
+    - 'eval('
+    - 'exec('
+    - '__import__'
+  
+  javascript:
+    - 'eval('
+    - 'document.write('
+
+max_complexity: 10
+max_line_length: 120
+max_function_length: 50
+
+team_preferences:
+  focus_areas:
+    - security
+    - performance
+    - readability
+  
+  severity_thresholds:
+    critical: 0.9
+    high: 0.7
+    medium: 0.5
