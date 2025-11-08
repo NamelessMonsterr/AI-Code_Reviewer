@@ -7,15 +7,11 @@ def test_python_version():
     assert sys.version_info >= (3, 10)
 
 
-def test_basic():
-    """Basic sanity test."""
-    assert True
-
-
-def test_math():
-    """Test basic math."""
+def test_basic_math():
+    """Test basic operations."""
     assert 1 + 1 == 2
     assert 10 - 5 == 5
+    assert 3 * 4 == 12
 
 
 def test_root_endpoint(client):
@@ -33,3 +29,12 @@ def test_health_endpoint(client):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
+
+
+def test_info_endpoint(client):
+    """Test info endpoint."""
+    response = client.get("/api/v1/info")
+    assert response.status_code == 200
+    data = response.json()
+    assert "name" in data
+    assert "version" in data
