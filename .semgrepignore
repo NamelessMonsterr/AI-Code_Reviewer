@@ -1,0 +1,14 @@
+# .semgrepignore
+node_modules/
+dist/
+build/
+*.min.js
+*.map
+.git/
+__pycache__/
+*.pyc
+.venv/
+venv/
+htmlcov/
+.pytest_cache/
+*.egg-info/
