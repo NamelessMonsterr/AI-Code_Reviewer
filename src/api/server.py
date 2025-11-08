@@ -1,430 +1,356 @@
-from fastapi import FastAPI, HTTPException, Depends, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from prometheus_client import Counter, Histogram, generate_latest
-from contextlib import asynccontextmanager
+"""
+FastAPI Server Configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Main FastAPI application setup with middleware, routes, and error handlers.
+"""
+
 import logging
-import time
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import List, Optional
 
-from sqlalchemy import create_engine
-from sqlalchemy.pool import QueuePool
-import redis
+from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from prometheus_client import make_asgi_app
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
-from src.config.settings import Settings
-from src.config.validator import validate_configuration
-from src.security.rate_limiter import RateLimiter
-from src.security.input_validator import InputValidator
-from src.auth.rbac import RBACManager, Permission
-from src.autofix.code_fixer import CodeFixer
-from src.analytics.metrics_tracker import MetricsTracker
-from src.security.env_validator import validate_production_env
+from src.core.config import settings
+from src.core.logging import setup_logging, get_logger
+from src.api.routes import router as api_router
 
 # Initialize logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+setup_logging()
+logger = get_logger(__name__)
 
-# Load and validate configuration
-settings = validate_configuration()
+# Initialize Sentry if configured
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        integrations=[
+            FastApiIntegration(),
+            SqlalchemyIntegration(),
+        ],
+    )
+    logger.info("Sentry initialized successfully")
 
-# === DATABASE CONNECTION POOL ===
-engine = create_engine(
-    settings.DATABASE_URL,
-    poolclass=QueuePool,
-    pool_size=20,
-    max_overflow=40,
-    pool_pre_ping=True,
-    pool_recycle=3600
-)
-logger.info("Database engine created with pool_size=20, max_overflow=40")
 
-# === REDIS CONNECTION POOL ===
-redis_pool = redis.ConnectionPool(
-    host=settings.REDIS_HOST,
-    port=settings.REDIS_PORT,
-    max_connections=50,
-    decode_responses=True
-)
-redis_client = redis.Redis(connection_pool=redis_pool)
-logger.info("Redis client created with connection pool of max_connections=50")
+def get_allowed_origins() -> List[str]:
+    """
+    Get allowed CORS origins based on environment.
+    
+    Returns:
+        List[str]: List of allowed origins
+    """
+    if settings.debug:
+        # Development: Allow localhost only
+        return [
+            "http://localhost:3000",
+            "http://localhost:8080",
+            "http://localhost:5173",  # Vite default
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:8080",
+            "http://127.0.0.1:5173",
+        ]
+    else:
+        # Production: Use specific domains from environment
+        if settings.allowed_origins:
+            origins = [origin.strip() for origin in settings.allowed_origins.split(",")]
+            logger.info(f"Using allowed origins: {origins}")
+            return origins
+        return []
 
-# Initialize components
-rate_limiter = RateLimiter(settings.REDIS_URL)
-input_validator = InputValidator()
-rbac_manager = RBACManager()
-code_fixer = CodeFixer()
-metrics_tracker = MetricsTracker()
-
-# Prometheus metrics
-review_counter = Counter('code_reviews_total', 'Total code reviews')
-review_duration = Histogram('review_duration_seconds', 'Review duration')
-error_counter = Counter('api_errors_total', 'Total API errors', ['endpoint', 'error_type'])
-
-# Slowapi rate limiter for endpoints
-limiter = Limiter(key_func=get_remote_address)
-
-# HTTP Bearer token authentication
-security = HTTPBearer()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
-    # Production environment validation
-    if settings.ENVIRONMENT.lower() == 'production':
-        validate_production_env()
-    # Startup logging
-    logger.info("🚀 Starting AI Code Review Bot API Server")
-    logger.info(f"Environment: {settings.ENVIRONMENT}, Debug: {settings.DEBUG}, Port: {settings.PORT}")
+    """
+    Application lifespan manager.
+    
+    Args:
+        app: FastAPI application instance
+    """
+    # Startup
+    logger.info(f"Starting {settings.app_name} v{settings.version}")
+    logger.info(f"Environment: {settings.environment}")
+    logger.info(f"Debug mode: {settings.debug}")
+    
+    # Initialize database
+    try:
+        from src.database import init_db
+        init_db()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+    
+    # Initialize Redis
+    try:
+        from src.cache import test_redis_connection
+        if await test_redis_connection():
+            logger.info("Redis connection successful")
+    except Exception as e:
+        logger.warning(f"Redis connection failed: {e}")
+    
     yield
-    # Shutdown logging
-    logger.info("🛑 Shutting down AI Code Review Bot API Server")
+    
+    # Shutdown
+    logger.info(f"Shutting down {settings.app_name}")
 
-# Initialize FastAPI app
+
+# Create FastAPI application
 app = FastAPI(
-    title="AI Code Review Bot API",
-    description="Enterprise-grade AI-powered code review system",
-    version="1.0.0",
-    docs_url="/docs" if settings.DEBUG else None,
-    redoc_url="/redoc" if settings.DEBUG else None,
-    lifespan=lifespan
+    title=settings.app_name,
+    description="AI-powered code review automation tool",
+    version=settings.version,
+    debug=settings.debug,
+    lifespan=lifespan,
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
 )
 
-# Add rate limiter to app state
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS middleware
+# ============================================================================
+# Middleware Configuration
+# ============================================================================
+
+# CORS Middleware (SECURE)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.DEBUG else ["https://yourdomain.com"],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "Accept",
+        "Origin",
+        "User-Agent",
+        "DNT",
+        "Cache-Control",
+        "X-Requested-With",
+    ],
+    expose_headers=["Content-Length", "X-Request-ID"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
-# Request timing middleware
+# GZip Compression
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Trusted Host Middleware (Production)
+if not settings.debug:
+    allowed_hosts = ["*"]  # Configure this based on your domains
+    if settings.allowed_hosts:
+        allowed_hosts = [host.strip() for host in settings.allowed_hosts.split(",")]
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
+
+
+# ============================================================================
+# Custom Middleware
+# ============================================================================
+
 @app.middleware("http")
-async def add_process_time_header(request: Request, call_next):
-    start_time = time.time()
+async def add_request_id(request: Request, call_next):
+    """Add unique request ID to each request."""
+    import uuid
+    request_id = str(uuid.uuid4())
+    request.state.request_id = request_id
+    
     response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
+    response.headers["X-Request-ID"] = request_id
+    
     return response
 
-# Error handling middleware
+
 @app.middleware("http")
-async def error_handling_middleware(request: Request, call_next):
-    try:
-        return await call_next(request)
-    except Exception as e:
-        logger.error(f"Unhandled error: {str(e)}", exc_info=True)
-        error_counter.labels(endpoint=request.url.path, error_type=type(e).__name__).inc()
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Internal server error", "message": str(e)}
-        )
-
-# Dependency for verifying JWT tokens
-async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """Verify JWT token and return payload"""
-    try:
-        token = credentials.credentials
-        payload = rbac_manager.verify_token(token)
-        return payload
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-# Dependency for checking permissions
-def require_permission(permission: Permission):
-    """Dependency to check if user has required permission"""
-    async def permission_checker(
-        credentials: HTTPAuthorizationCredentials = Depends(security)
-    ) -> dict:
-        token = credentials.credentials
-        if not rbac_manager.has_permission(token, permission):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission {permission.value} required"
-            )
-        return rbac_manager.verify_token(token)
-    return permission_checker
-
-# Dependency for rate limiting (per user/IP)
-async def check_rate_limit(request: Request):
-    """Check rate limits for the request"""
-    user_id = None
-    if auth_header := request.headers.get("Authorization"):
-        try:
-            token = auth_header.replace("Bearer ", "")
-            payload = rbac_manager.verify_token(token)
-            user_id = payload.get('user_id')
-        except Exception:
-            pass
-
-    if user_id:
-        user_limit = rate_limiter.check_user_rate_limit(
-            user_id,
-            settings.RATE_LIMIT_PER_USER,
-            settings.RATE_LIMIT_WINDOW
-        )
-        if not user_limit['allowed']:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="User rate limit exceeded",
-                headers={"Retry-After": str(settings.RATE_LIMIT_WINDOW)}
-            )
-
-    client_ip = request.client.host
-    ip_limit = rate_limiter.check_ip_rate_limit(
-        client_ip,
-        settings.RATE_LIMIT_PER_IP,
-        settings.RATE_LIMIT_WINDOW
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests."""
+    logger.info(
+        f"Request: {request.method} {request.url.path}",
+        extra={
+            "method": request.method,
+            "path": request.url.path,
+            "client": request.client.host if request.client else None,
+        }
     )
-    if not ip_limit['allowed']:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="IP rate limit exceeded",
-            headers={"Retry-After": str(settings.RATE_LIMIT_WINDOW)}
-        )
+    
+    response = await call_next(request)
+    
+    logger.info(
+        f"Response: {response.status_code}",
+        extra={"status_code": response.status_code}
+    )
+    
+    return response
 
-# ============================================
-# API Endpoints
-# ============================================
+
+# ============================================================================
+# Exception Handlers
+# ============================================================================
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Handle HTTP exceptions."""
+    logger.error(
+        f"HTTP error: {exc.status_code} - {exc.detail}",
+        extra={"status_code": exc.status_code, "detail": exc.detail}
+    )
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": True,
+            "message": exc.detail,
+            "status_code": exc.status_code,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle request validation errors."""
+    logger.warning(
+        f"Validation error: {exc.errors()}",
+        extra={"errors": exc.errors()}
+    )
+    
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": True,
+            "message": "Validation error",
+            "details": exc.errors(),
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle all other exceptions."""
+    logger.exception(
+        f"Unhandled exception: {str(exc)}",
+        exc_info=True
+    )
+    
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": True,
+            "message": "Internal server error",
+            "detail": str(exc) if settings.debug else "An error occurred",
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
+
+
+# ============================================================================
+# Routes
+# ============================================================================
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """Root endpoint."""
     return {
-        "service": "AI Code Review Bot",
-        "version": "1.0.0",
+        "name": settings.app_name,
+        "version": settings.version,
         "status": "running",
-        "environment": settings.ENVIRONMENT
+        "environment": settings.environment,
+        "docs": "/docs" if settings.debug else "disabled",
     }
+
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {
+    """
+    Health check endpoint.
+    
+    Returns:
+        dict: Health status
+    """
+    health_status = {
         "status": "healthy",
-        "timestamp": time.time(),
-        "checks": {
-            "api": "ok",
-            "redis": "ok",
-            "database": "ok"
-        }
+        "service": settings.app_name,
+        "version": settings.version,
+        "environment": settings.environment,
     }
-
-@app.get("/ready")
-async def readiness_check():
-    """Readiness check for Kubernetes"""
-    return {"status": "ready"}
-
-@app.post("/api/review")
-@limiter.limit("10/minute")
-async def review_code(
-    request: Request,
-    code: str,
-    language: str,
-    file_path: Optional[str] = None,
-    _: dict = Depends(verify_token),
-    __: None = Depends(check_rate_limit)
-):
-    """
-    Review code and return findings
-
-    Rate limit: 10 requests per minute per user
-    """
-    with review_duration.time():
-        # Validate input
-        code_validation = input_validator.validate_code_input(code, language)
-        if not code_validation['valid']:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"errors": code_validation['errors']}
-            )
-
-        if file_path:
-            path_validation = input_validator.validate_filename(file_path)
-            if not path_validation['valid']:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={"errors": path_validation['errors']}
-                )
-
-        try:
-            review_counter.inc()
-
-            result = {
-                "status": "success",
-                "language": language,
-                "issues_found": 0,
-                "suggestions": [],
-                "security_issues": [],
-                "compliance_status": "PASSED"
-            }
-
-            metrics_tracker.record_review(
-                pr=1,
-                issues=result['issues_found'],
-                langs=[language],
-                review_time=1.0
-            )
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Review failed: {str(e)}", exc_info=True)
-            error_counter.labels(endpoint="/api/review", error_type=type(e).__name__).inc()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Review failed: {str(e)}"
-            )
-
-@app.post("/api/autofix")
-@limiter.limit("5/minute")
-async def generate_autofix(
-    request: Request,
-    code: str,
-    issue: str,
-    language: str,
-    _: dict = Depends(verify_token),
-    __: None = Depends(check_rate_limit)
-):
-    """
-    Generate automatic fix for code issue
-
-    Rate limit: 5 requests per minute per user
-    """
+    
+    # Check database
     try:
-        fixed_code = code_fixer.generate_fix(code, issue, language)
-        return {
-            "status": "success",
-            "original_code": code,
-            "fixed_code": fixed_code,
-            "issue": issue
-        }
+        from src.database import engine
+        with engine.connect() as conn:
+            conn.execute("SELECT 1")
+        health_status["database"] = "healthy"
     except Exception as e:
-        logger.error(f"Autofix failed: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Autofix failed: {str(e)}"
-        )
-
-@app.get("/api/analytics/summary")
-async def get_analytics_summary(
-    _: dict = Depends(require_permission(Permission.VIEW_ANALYTICS))
-):
-    """Get analytics summary (requires VIEW_ANALYTICS permission)"""
+        logger.error(f"Database health check failed: {e}")
+        health_status["database"] = "unhealthy"
+        health_status["status"] = "degraded"
+    
+    # Check Redis
     try:
-        summary = metrics_tracker.get_summary()
-        return {
-            "status": "success",
-            "data": summary
-        }
+        from src.cache import redis_client
+        await redis_client.ping()
+        health_status["redis"] = "healthy"
     except Exception as e:
-        logger.error(f"Failed to get analytics: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        logger.warning(f"Redis health check failed: {e}")
+        health_status["redis"] = "unhealthy"
+    
+    return health_status
 
-@app.get("/api/compliance/status")
-async def get_compliance_status(
-    _: dict = Depends(require_permission(Permission.VIEW_REPORTS))
-):
-    """Get compliance status across standards"""
-    return {
-        "standards": {
-            "SOC2": {"status": "PASSED", "score": 0.96, "violations": 2},
-            "HIPAA": {"status": "PASSED", "score": 0.98, "violations": 1},
-            "PCI_DSS": {"status": "PASSED", "score": 0.94, "violations": 3},
-            "GDPR": {"status": "PASSED", "score": 0.97, "violations": 1}
-        }
-    }
-
-@app.post("/api/feedback")
-async def submit_feedback(
-    request: Request,
-    review_id: str,
-    comment_id: str,
-    feedback_type: str,
-    issue_type: str,
-    payload: dict = Depends(verify_token)
-):
-    """Submit feedback on review"""
-    try:
-        from src.feedback.feedback_learner import FeedbackLearner
-        learner = FeedbackLearner()
-
-        learner.record_feedback(
-            review_id=review_id,
-            comment_id=comment_id,
-            feedback_type=feedback_type,
-            issue_type=issue_type,
-            metadata={"user_id": payload['user_id']}
-        )
-
-        return {"status": "success", "message": "Feedback recorded"}
-
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Failed to record feedback: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
 
 @app.get("/metrics")
 async def metrics():
-    """Prometheus metrics endpoint"""
-    from fastapi.responses import Response
-    return Response(generate_latest(), media_type="text/plain")
+    """Prometheus metrics endpoint."""
+    if not settings.prometheus_enabled:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"error": "Metrics disabled"}
+        )
+    
+    metrics_app = make_asgi_app()
+    return await metrics_app(request.scope, request.receive, request.send)
 
-@app.get("/api/status")
-async def get_status():
-    """Get detailed system status"""
-    return {
-        "service": "AI Code Review Bot",
-        "version": "1.0.0",
-        "environment": settings.ENVIRONMENT,
-        "uptime": time.time(),
-        "features": {
-            "auto_fix": settings.ENABLE_AUTO_FIX,
-            "test_generation": settings.ENABLE_TEST_GENERATION,
-            "compliance_checks": settings.ENABLE_COMPLIANCE_CHECKS,
-            "redis_cache": settings.ENABLE_REDIS_CACHE
-        },
-        "rate_limits": {
-            "per_user": settings.RATE_LIMIT_PER_USER,
-            "per_ip": settings.RATE_LIMIT_PER_IP,
-            "window_seconds": settings.RATE_LIMIT_WINDOW
-        }
-    }
 
-# ============================================
-# Run Server
-# ============================================
+# Include API routes
+app.include_router(api_router, prefix="/api/v1")
+
+
+# ============================================================================
+# Startup Events
+# ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Run on application startup."""
+    logger.info("Application startup complete")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Run on application shutdown."""
+    logger.info("Application shutdown complete")
+
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
 
 if __name__ == "__main__":
     import uvicorn
-
+    
     uvicorn.run(
         "src.api.server:app",
         host="0.0.0.0",
-        port=settings.PORT,
-        workers=settings.WORKERS,
-        reload=settings.DEBUG,
-        log_level=settings.LOG_LEVEL.lower()
+        port=settings.port,
+        reload=settings.debug,
+        workers=1 if settings.debug else settings.workers,
+        log_level=settings.log_level.lower(),
+        access_log=True,
     )
