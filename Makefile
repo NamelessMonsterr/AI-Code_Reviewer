@@ -1,30 +1,34 @@
-.PHONY: help install install-dev test lint format clean run
+.PHONY: help install dev test lint format run docker-up docker-down migrate
 
 help:
 	@echo "Available commands:"
 	@echo "  install      Install production dependencies"
-	@echo "  install-dev  Install development dependencies"
+	@echo "  dev          Install development dependencies"
 	@echo "  test         Run tests with coverage"
 	@echo "  lint         Run linting checks"
-	@echo "  format       Format code with black and isort"
-	@echo "  clean        Clean cache files"
+	@echo "  format       Format code"
 	@echo "  run          Run the application"
+	@echo "  docker-up    Start Docker services"
+	@echo "  docker-down  Stop Docker services"
+	@echo "  migrate      Run database migrations"
 
 install:
 	pip install --upgrade pip
 	pip install -r requirements.txt
 
-install-dev:
+dev:
 	pip install --upgrade pip
 	pip install -r requirements-dev.txt
 	pre-commit install
+	cp .env.example .env
 
 test:
-	pytest -v --cov=app --cov-report=html --cov-report=term
+	pytest tests/ -v --cov=app --cov-report=html --cov-report=term
 
 lint:
+	black --check app tests
+	isort --check-only app tests
 	flake8 app tests
-	pylint app
 	mypy app
 	bandit -r app
 	safety check
@@ -33,10 +37,20 @@ format:
 	black app tests
 	isort app tests
 
-clean:
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-	rm -rf .pytest_cache .coverage htmlcov .mypy_cache
-
 run:
-	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	uvicorn app.main:app --reload --host 0.0.0.0 --port ${PORT:-8080}
+
+docker-up:
+	docker-compose up -d
+
+docker-down:
+	docker-compose down
+
+migrate:
+	alembic upgrade head
+
+celery:
+	celery -A app.celery_app worker --loglevel=info
+
+flower:
+	celery -A app.celery_app flower
