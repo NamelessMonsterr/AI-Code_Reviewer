@@ -1,8 +1,8 @@
 # Core Dependencies
 python>=3.10
 
-# AI/ML Models
-openai>=1.3.0 
+# AI/ML Models (Updated to new API)
+openai>=1.12.0
 anthropic==0.7.0
 google-generativeai==0.3.0
 
@@ -21,9 +21,16 @@ radon==6.0.1
 
 # API & Web Framework
 fastapi==0.104.1
-uvicorn==0.24.0
-pydantic==2.5.0
+uvicorn[standard]==0.24.0
+pydantic[email]==2.5.0
+pydantic-settings==2.1.0
 requests==2.31.0
+
+# Rate Limiting
+slowapi==0.1.9
+
+# Input Validation & Sanitization
+bleach==6.1.0
 
 # Database & Caching
 sqlalchemy==2.0.23
@@ -36,6 +43,10 @@ pyjwt==2.8.0
 python3-saml==1.15.0
 cryptography==41.0.7
 bcrypt==4.1.1
+python-multipart==0.0.6
+
+# Circuit Breaker & Retry
+tenacity==8.2.3
 
 # DevOps & Deployment
 docker==6.1.3
@@ -51,6 +62,8 @@ rich==13.7.0
 pytest==7.4.3
 pytest-cov==4.1.0
 pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+httpx==0.25.2
 
 # Data Processing
 numpy==1.26.2
@@ -58,7 +71,7 @@ pandas==2.1.3
 
 # Monitoring & Logging
 prometheus-client==0.19.0
-sentry-sdk==1.38.0
+sentry-sdk[fastapi]==1.38.0
 
 # Documentation
 mkdocs==1.5.3
@@ -67,11 +80,20 @@ mkdocs-material==9.4.14
 # Code Quality
 pre-commit==3.5.0
 
-
 # Phase 5 - ML/AI Training
 scikit-learn==1.3.2
-tensorflow==2.15.0  # Optional for advanced ML
-torch==2.1.1  # Optional for PyTorch models
-transformers==4.35.2  # For Hugging Face models
-sentence-transformers==2.2.2  # For embeddings
+sentence-transformers==2.2.2
 
+# Optional: Advanced ML (uncomment if needed)
+# tensorflow==2.15.0
+# torch==2.1.1
+# transformers==4.35.2
+
+# Secrets Management (Optional - uncomment as needed)
+# boto3==1.34.10  # AWS Secrets Manager
+# hvac==2.0.0     # HashiCorp Vault
+# google-cloud-secret-manager==2.16.4  # GCP Secret Manager
+
+# Additional Production Dependencies
+gunicorn==21.2.0  # Production WSGI server
+python-json-logger==2.0.7  # Structured logging
