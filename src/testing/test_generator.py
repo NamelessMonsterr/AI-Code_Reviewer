@@ -1,4 +1,4 @@
-import openai
+from openai import OpenAI
 import os
 from typing import Dict, List
 
@@ -7,13 +7,14 @@ class TestGenerator:
     
     def __init__(self):
         self.api_key = os.getenv('OPENAI_API_KEY')
-        openai.api_key = self.api_key
+        if not self.api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+        self.client = OpenAI(api_key=self.api_key)
     
     def generate_tests(self, function_code: str, language: str, 
                        framework: str = None) -> str:
         """Generate comprehensive unit tests"""
         
-        # Determine test framework
         if framework is None:
             framework = self._get_default_framework(language)
         
@@ -30,7 +31,7 @@ Include tests for:
 
 Provide complete, runnable test code."""
         
-        response = openai.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model='gpt-4',
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.2,
@@ -69,7 +70,7 @@ Include tests for:
 4. Input validation
 5. Response format validation"""
         
-        response = openai.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model='gpt-4',
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.2
@@ -92,7 +93,7 @@ List:
 2. Missing edge cases
 3. Untested error conditions"""
         
-        response = openai.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model='gpt-4',
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.2
