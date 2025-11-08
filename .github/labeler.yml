@@ -1,0 +1,25 @@
+documentation:
+  - '**/*.md'
+  - 'docs/**'
+
+python:
+  - 'src/**/*.py'
+  - 'tests/**/*.py'
+
+typescript:
+  - 'src/**/*.ts'
+  - '__tests__/**/*.ts'
+
+security:
+  - 'src/security/**'
+  - 'src/auth/**'
+
+compliance:
+  - 'src/compliance/**'
+
+api:
+  - 'src/api/**'
+
+tests:
+  - 'tests/**'
+  - '__tests__/**'
