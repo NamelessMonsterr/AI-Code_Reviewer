@@ -1,30 +1,32 @@
 # Core Dependencies
-python>=3.10
+# Specify exact Python version compatibility
+python_requires>=3.10,<3.12
 
-# AI/ML Models (Updated to new API)
-openai>=1.12.0
-anthropic==0.7.0
-google-generativeai==0.3.0
+# AI/ML Models - Pin versions for stability
+openai>=1.12.0,<2.0.0
+anthropic==0.7.8
+google-generativeai==0.3.2
 
-# Security Scanning
+# Security Scanning - Compatible versions
 bandit==1.7.5
 semgrep==1.45.0
 detect-secrets==1.4.0
 safety==2.3.5
 
-# Code Analysis
-pylint==3.0.2
+# Code Analysis - Tested versions
+pylint==3.0.3
 flake8==6.1.0
-black==23.11.0
-mypy==1.7.0
+black==23.12.1
+mypy==1.7.1
 radon==6.0.1
 
-# API & Web Framework
+# API & Web Framework - FastAPI ecosystem
 fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic[email]==2.5.0
+uvicorn[standard]==0.24.0.post1
+pydantic[email]==2.5.3
 pydantic-settings==2.1.0
 requests==2.31.0
+httpx==0.25.2
 
 # Rate Limiting
 slowapi==0.1.9
@@ -32,24 +34,24 @@ slowapi==0.1.9
 # Input Validation & Sanitization
 bleach==6.1.0
 
-# Database & Caching
+# Database & Caching - Stable versions
 sqlalchemy==2.0.23
 psycopg2-binary==2.9.9
 redis==5.0.1
-alembic==1.12.1
+alembic==1.13.0
 
 # Authentication & Security
 pyjwt==2.8.0
-python3-saml==1.15.0
+python3-saml==1.16.0
 cryptography==41.0.7
-bcrypt==4.1.1
+bcrypt==4.1.2
 python-multipart==0.0.6
 
-# Circuit Breaker & Retry
+# Retry & Circuit Breaker
 tenacity==8.2.3
 
 # DevOps & Deployment
-docker==6.1.3
+docker==7.0.0
 kubernetes==28.1.0
 pyyaml==6.0.1
 
@@ -58,16 +60,15 @@ python-dotenv==1.0.0
 click==8.1.7
 rich==13.7.0
 
-# Testing
+# Testing - Exact versions
 pytest==7.4.3
 pytest-cov==4.1.0
 pytest-asyncio==0.21.1
 pytest-mock==3.12.0
-httpx==0.25.2
 
 # Data Processing
 numpy==1.26.2
-pandas==2.1.3
+pandas==2.1.4
 
 # Monitoring & Logging
 prometheus-client==0.19.0
@@ -75,25 +76,19 @@ sentry-sdk[fastapi]==1.38.0
 
 # Documentation
 mkdocs==1.5.3
-mkdocs-material==9.4.14
+mkdocs-material==9.5.3
 
 # Code Quality
-pre-commit==3.5.0
+pre-commit==3.6.0
 
 # Phase 5 - ML/AI Training
 scikit-learn==1.3.2
 sentence-transformers==2.2.2
 
-# Optional: Advanced ML (uncomment if needed)
-# tensorflow==2.15.0
-# torch==2.1.1
-# transformers==4.35.2
+# Production Server
+gunicorn==21.2.0
+python-json-logger==2.0.7
 
-# Secrets Management (Optional - uncomment as needed)
-# boto3==1.34.10  # AWS Secrets Manager
-# hvac==2.0.0     # HashiCorp Vault
-# google-cloud-secret-manager==2.16.4  # GCP Secret Manager
-
-# Additional Production Dependencies
-gunicorn==21.2.0  # Production WSGI server
-python-json-logger==2.0.7  # Structured logging
+# HTTP Client
+aiofiles==23.2.1
+aiohttp==3.9.1
