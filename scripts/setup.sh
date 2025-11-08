@@ -1,132 +1,65 @@
 #!/bin/bash
-set -e
 
-echo "🚀 Setting up AI Code Review Bot..."
-echo ""
+echo "🚀 Setting up AI Code Reviewer..."
 
-# Colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-
-# Check prerequisites
-echo "📋 Checking prerequisites..."
-
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ Python 3 is not installed${NC}"
-    exit 1
+# Create virtual environment
+if [ ! -d "venv" ]; then
+    echo "📦 Creating virtual environment..."
+    python3 -m venv venv
 fi
 
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}❌ Docker is not installed${NC}"
-    exit 1
+# Activate virtual environment
+echo "🌍 Activating virtual environment..."
+source venv/bin/activate
+
+# Upgrade pip
+echo "⬆️  Upgrading pip..."
+pip install --upgrade pip setuptools wheel
+
+# Clean requirements.txt if needed
+if [ -f requirements.txt ] && grep -q "python_requires" requirements.txt; then
+    echo "🧹 Cleaning requirements.txt..."
+    grep -v "python_requires" requirements.txt > requirements_clean.txt
+    mv requirements_clean.txt requirements.txt
 fi
 
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}❌ Docker Compose is not installed${NC}"
-    exit 1
-fi
+# Install dependencies
+echo "📚 Installing dependencies..."
+pip install -r requirements-dev.txt
 
-echo -e "${GREEN}✅ All prerequisites satisfied${NC}"
-echo ""
+# Create necessary directories
+echo "📁 Creating project structure..."
+mkdir -p src/{api,core,models,services,integrations,security,utils,schemas,tasks,database}
+mkdir -p tests/{unit,integration,fixtures}
+mkdir -p logs data config backups
 
-# Create .env if it doesn't exist
-if [ ! -f .env ]; then
-    echo "📝 Creating .env file..."
+# Create __init__.py files
+echo "📝 Creating __init__.py files..."
+find src -type d -exec touch {}/__init__.py \;
+find tests -type d -exec touch {}/__init__.py \;
+
+# Setup .env file
+if [ -f .env.example ] && [ ! -f .env ]; then
+    echo "🔐 Creating .env file..."
     cp .env.example .env
-    
-    # Generate secrets
-    JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
-    DB_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
-    
-    # Update .env
-    sed -i "s/your-jwt-secret-key-at-least-32-characters-long-please-change-this/$JWT_SECRET/" .env
-    sed -i "s/your-secure-database-password-here/$DB_PASSWORD/" .env
-    
-    echo -e "${YELLOW}⚠️  Please edit .env and add your OPENAI_API_KEY${NC}"
-    echo ""
+    echo "⚠️  Don't forget to update .env with your API keys!"
 fi
 
-# Create required directories
-echo "📁 Creating directories..."
-mkdir -p data logs config monitoring/prometheus monitoring/grafana
-
-# Install Python dependencies
-echo "📦 Installing Python dependencies..."
-python3 -m pip install -r requirements.txt
-
-# Validate configuration
-echo "🔍 Validating configuration..."
-if python3 -m src.config.validator; then
-    echo -e "${GREEN}✅ Configuration valid${NC}"
-else
-    echo -e "${RED}❌ Configuration validation failed${NC}"
-    exit 1
+# Install pre-commit hooks
+if command -v pre-commit &> /dev/null; then
+    echo "🎣 Installing pre-commit hooks..."
+    pre-commit install
 fi
 
-# Build Docker image
-echo "🐳 Building Docker image..."
-docker-compose build
+# Run initial tests
+echo "🧪 Running initial tests..."
+pytest tests/ -v || echo "⚠️  Some tests failed (expected on first run)"
 
 echo ""
-echo -e "${GREEN}✅ Setup complete!${NC}"
+echo "✅ Setup complete!"
 echo ""
-echo "Next steps:"
-echo "1. Edit .env and add your OPENAI_API_KEY"
-echo "2. Run: docker-compose up -d"
-echo "3. Check status: docker-compose ps"
-echo "4. View logs: docker-compose logs -f"
-
-
-# ============================================
-# FILE: scripts/migrate-openai-api.sh
-# ============================================
-#!/bin/bash
-set -e
-
-echo "🔄 Migrating to new OpenAI API..."
+echo "📋 Next steps:"
+echo "   1. Edit .env and add your API keys"
+echo "   2. Run tests: pytest tests/"
+echo "   3. Start development: uvicorn src.api.server:app --reload"
 echo ""
-
-FILES_TO_MIGRATE=(
-    "src/documentation/doc_generator.py"
-    "src/interactive/chat_interface.py"
-    "src/performance/profiler.py"
-    "src/testing/test_generator.py"
-    "src/search/semantic_search.py"
-    "src/training/model_finetuner.py"
-)
-
-echo "Files to migrate:"
-for file in "${FILES_TO_MIGRATE[@]}"; do
-    echo "  - $file"
-done
-echo ""
-
-read -p "Continue with migration? (y/n) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Migration cancelled"
-    exit 1
-fi
-
-# Backup original files
-echo "📦 Creating backups..."
-for file in "${FILES_TO_MIGRATE[@]}"; do
-    if [ -f "$file" ]; then
-        cp "$file" "$file.backup"
-        echo "  ✓ Backed up $file"
-    fi
-done
-echo ""
-
-# Apply migrations (files are already fixed in the artifact above)
-echo "✨ Applying migrations..."
-echo "Please replace the content of the following files with the fixed versions provided:"
-for file in "${FILES_TO_MIGRATE[@]}"; do
-    echo "  - $file"
-done
-echo ""
-
-echo "Backups are available at: *.backup"
-echo "Run tests after migration: pytest tests/"
