@@ -1,6 +1,6 @@
 # Core Dependencies
 # Specify exact Python version compatibility
-python_requires>=3.10,<3.12
+python_requires<3.12,>=3.10
 
 # AI/ML Models - Pin versions for stability
 openai>=1.12.0,<2.0.0
@@ -92,3 +92,4 @@ python-json-logger==2.0.7
 # HTTP Client
 aiofiles==23.2.1
 aiohttp==3.9.1
+
