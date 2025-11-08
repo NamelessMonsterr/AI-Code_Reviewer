@@ -1,0 +1,35 @@
+# Development dependencies
+-r requirements.txt
+
+# Testing
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+pytest-xdist==3.5.0
+pytest-timeout==2.2.0
+coverage[toml]==7.3.4
+
+# Linting & Formatting
+flake8==6.1.0
+black==23.12.1
+isort==5.13.2
+pylint==3.0.3
+mypy==1.7.1
+
+# Security
+bandit==1.7.5
+safety==2.3.5
+
+# Documentation
+mkdocs==1.5.3
+mkdocs-material==9.5.3
+
+# Debugging
+ipython==8.18.1
+ipdb==0.13.13
+
+# Type checking
+types-requests==2.31.0.10
+types-redis==4.6.0.11
+types-PyYAML==6.0.12.12
