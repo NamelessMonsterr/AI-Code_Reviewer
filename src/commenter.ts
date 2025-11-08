@@ -29,7 +29,7 @@ export class Commenter {
   /**
    * @param mode Can be "create", "replace", "append" and "prepend". Default is "replace".
    */
-  async comment(message: string, tag: string, mode: string) {
+  async comment(message: string, tag: string, mode: string): Promise<void> {
     let target: number
     if (context.payload.pull_request) {
       target = context.payload.pull_request.number
@@ -66,8 +66,7 @@ ${tag}`
     }
   }
 
-  get_description(description: string) {
-    // remove our summary from description by looking for description_tag and description_tag_end
+  get_description(description: string): string {
     const start = description.indexOf(DESCRIPTION_TAG)
     const end = description.indexOf(DESCRIPTION_TAG_END)
     if (start >= 0 && end >= 0) {
@@ -79,11 +78,8 @@ ${tag}`
     return description
   }
 
-  async update_description(pull_number: number, message: string) {
-    // add this response to the description field of the PR as release notes by looking
-    // for the tag (marker)
+  async update_description(pull_number: number, message: string): Promise<void> {
     try {
-      // get latest description from PR
       const pr = await octokit.pulls.get({
         owner: repo.owner,
         repo: repo.repo,
@@ -95,8 +91,6 @@ ${tag}`
       }
       const description = this.get_description(body)
 
-      // find the tag in the description and replace the content between the tag and the tag_end
-      // if not found, add the tag and the content to the end of the description
       const tag_index = description.indexOf(DESCRIPTION_TAG)
       const tag_end_index = description.indexOf(DESCRIPTION_TAG_END)
       const comment = `${DESCRIPTION_TAG}\n${message}\n${DESCRIPTION_TAG_END}`
@@ -121,9 +115,10 @@ ${tag}`
           body: new_description
         })
       }
-    } catch (e: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       core.warning(
-        `Failed to get PR: ${e}, skipping adding release notes to description.`
+        `Failed to get PR: ${errorMessage}, skipping adding release notes to description.`
       )
     }
   }
@@ -135,13 +130,12 @@ ${tag}`
     line: number,
     message: string,
     tag: string = COMMENT_TAG
-  ) {
+  ): Promise<void> {
     message = `${COMMENT_GREETING}
 
 ${message}
 
 ${tag}`
-    // replace comment made by this action
     try {
       let found = false
       const comments = await this.get_comments_at_line(pull_number, path, line)
@@ -169,8 +163,9 @@ ${tag}`
           line
         })
       }
-    } catch (e: any) {
-      core.warning(`Failed to post review comment: ${e}`)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to post review comment: ${errorMessage}`)
     }
   }
 
@@ -178,7 +173,7 @@ ${tag}`
     pull_number: number,
     top_level_comment: any,
     message: string
-  ) {
+  ): Promise<void> {
     const reply = `${COMMENT_GREETING}
 
 ${message}
@@ -186,7 +181,6 @@ ${message}
 ${COMMENT_REPLY_TAG}
 `
     try {
-      // Post the reply to the user comment
       await octokit.pulls.createReplyForReviewComment({
         owner: repo.owner,
         repo: repo.repo,
@@ -195,22 +189,23 @@ ${COMMENT_REPLY_TAG}
         comment_id: top_level_comment.id
       })
     } catch (error) {
-      core.warning(`Failed to reply to the top-level comment ${error}`)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to reply to the top-level comment ${errorMessage}`)
       try {
         await octokit.pulls.createReplyForReviewComment({
           owner: repo.owner,
           repo: repo.repo,
           pull_number,
-          body: `Could not post the reply to the top-level comment due to the following error: ${error}`,
+          body: `Could not post the reply to the top-level comment due to the following error: ${errorMessage}`,
           comment_id: top_level_comment.id
         })
-      } catch (e) {
-        core.warning(`Failed to reply to the top-level comment ${e}`)
+      } catch (secondError) {
+        const secondErrorMessage = secondError instanceof Error ? secondError.message : String(secondError)
+        core.warning(`Failed to reply to the top-level comment ${secondErrorMessage}`)
       }
     }
     try {
       if (top_level_comment.body.includes(COMMENT_TAG)) {
-        // replace COMMENT_TAG with COMMENT_REPLY_TAG in topLevelComment
         const newBody = top_level_comment.body.replace(
           COMMENT_TAG,
           COMMENT_REPLY_TAG
@@ -223,11 +218,12 @@ ${COMMENT_REPLY_TAG}
         })
       }
     } catch (error) {
-      core.warning(`Failed to update the top-level comment ${error}`)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to update the top-level comment ${errorMessage}`)
     }
   }
 
-  async get_comments_at_line(pull_number: number, path: string, line: number) {
+  async get_comments_at_line(pull_number: number, path: string, line: number): Promise<any[]> {
     const comments = await this.list_review_comments(pull_number)
     return comments.filter(
       (comment: any) =>
@@ -240,13 +236,12 @@ ${COMMENT_REPLY_TAG}
     path: string,
     line: number,
     tag: string = ''
-  ) {
+  ): Promise<string> {
     const existing_comments = await this.get_comments_at_line(
       pull_number,
       path,
       line
     )
-    // find all top most comments
     const top_level_comments = []
     for (const comment of existing_comments) {
       if (!comment.in_reply_to_id) {
@@ -257,7 +252,6 @@ ${COMMENT_REPLY_TAG}
     let all_chains = ''
     let chain_num = 0
     for (const top_level_comment of top_level_comments) {
-      // get conversation chain
       const chain = await this.compose_conversation_chain(
         existing_comments,
         top_level_comment
@@ -276,7 +270,7 @@ ${chain}
   async compose_conversation_chain(
     reviewComments: any[],
     topLevelComment: any
-  ) {
+  ): Promise<string> {
     const conversationChain = reviewComments
       .filter((cmt: any) => cmt.in_reply_to_id === topLevelComment.id)
       .map((cmt: any) => `${cmt.user.login}: ${cmt.body}`)
@@ -288,7 +282,7 @@ ${chain}
     return conversationChain.join('\n---\n')
   }
 
-  async get_conversation_chain(pull_number: number, comment: any) {
+  async get_conversation_chain(pull_number: number, comment: any): Promise<{chain: string, topLevelComment: any}> {
     try {
       const review_comments = await this.list_review_comments(pull_number)
       const top_level_comment = await this.get_top_level_comment(
@@ -300,8 +294,9 @@ ${chain}
         top_level_comment
       )
       return {chain, topLevelComment: top_level_comment}
-    } catch (e: any) {
-      core.warning(`Failed to get conversation chain: ${e}`)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to get conversation chain: ${errorMessage}`)
       return {
         chain: '',
         topLevelComment: null
@@ -309,7 +304,7 @@ ${chain}
     }
   }
 
-  async get_top_level_comment(reviewComments: any[], comment: any) {
+  async get_top_level_comment(reviewComments: any[], comment: any): Promise<any> {
     let top_level_comment = comment
 
     while (top_level_comment.in_reply_to_id) {
@@ -327,7 +322,7 @@ ${chain}
     return top_level_comment
   }
 
-  async list_review_comments(target: number) {
+  async list_review_comments(target: number): Promise<any[]> {
     const all_comments: any[] = []
     let page = 1
     try {
@@ -347,13 +342,14 @@ ${chain}
       }
 
       return all_comments
-    } catch (e: any) {
-      console.warn(`Failed to list review comments: ${e}`)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to list review comments: ${errorMessage}`)
       return all_comments
     }
   }
 
-  async create(body: string, target: number) {
+  async create(body: string, target: number): Promise<void> {
     try {
       await octokit.issues.createComment({
         owner: repo.owner,
@@ -361,12 +357,13 @@ ${chain}
         issue_number: target,
         body
       })
-    } catch (e: any) {
-      core.warning(`Failed to create comment: ${e}`)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to create comment: ${errorMessage}`)
     }
   }
 
-  async replace(body: string, tag: string, target: number) {
+  async replace(body: string, tag: string, target: number): Promise<void> {
     try {
       const cmt = await this.find_comment_with_tag(tag, target)
       if (cmt) {
@@ -379,12 +376,13 @@ ${chain}
       } else {
         await this.create(body, target)
       }
-    } catch (e: any) {
-      core.warning(`Failed to replace comment: ${e}`)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to replace comment: ${errorMessage}`)
     }
   }
 
-  async append(body: string, tag: string, target: number) {
+  async append(body: string, tag: string, target: number): Promise<void> {
     try {
       const cmt = await this.find_comment_with_tag(tag, target)
       if (cmt) {
@@ -397,12 +395,13 @@ ${chain}
       } else {
         await this.create(body, target)
       }
-    } catch (e: any) {
-      core.warning(`Failed to append comment: ${e}`)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to append comment: ${errorMessage}`)
     }
   }
 
-  async prepend(body: string, tag: string, target: number) {
+  async prepend(body: string, tag: string, target: number): Promise<void> {
     try {
       const cmt = await this.find_comment_with_tag(tag, target)
       if (cmt) {
@@ -415,12 +414,13 @@ ${chain}
       } else {
         await this.create(body, target)
       }
-    } catch (e: any) {
-      core.warning(`Failed to prepend comment: ${e}`)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to prepend comment: ${errorMessage}`)
     }
   }
 
-  async find_comment_with_tag(tag: string, target: number) {
+  async find_comment_with_tag(tag: string, target: number): Promise<any | null> {
     try {
       const comments = await this.list_comments(target)
       for (const cmt of comments) {
@@ -430,13 +430,14 @@ ${chain}
       }
 
       return null
-    } catch (e: any) {
-      core.warning(`Failed to find comment with tag: ${e}`)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to find comment with tag: ${errorMessage}`)
       return null
     }
   }
 
-  async list_comments(target: number) {
+  async list_comments(target: number): Promise<any[]> {
     const all_comments: any[] = []
     let page = 1
     try {
@@ -456,8 +457,9 @@ ${chain}
       }
 
       return all_comments
-    } catch (e: any) {
-      console.warn(`Failed to list comments: ${e}`)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      core.warning(`Failed to list comments: ${errorMessage}`)
       return all_comments
     }
   }
