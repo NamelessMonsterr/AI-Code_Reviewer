@@ -18,6 +18,7 @@ from src.security.input_validator import InputValidator
 from src.auth.rbac import RBACManager, Permission
 from src.autofix.code_fixer import CodeFixer
 from src.analytics.metrics_tracker import MetricsTracker
+from src.security.env_validator import validate_production_env
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -47,15 +48,16 @@ security = HTTPBearer()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
-    # Startup
+    # Production environment validation
+    if settings.ENVIRONMENT.lower() == 'production':
+        validate_production_env()
+    # Startup logging
     logger.info("🚀 Starting AI Code Review Bot API Server")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug Mode: {settings.DEBUG}")
     logger.info(f"Port: {settings.PORT}")
-    
     yield
-    
-    # Shutdown
+    # Shutdown logging
     logger.info("🛑 Shutting down AI Code Review Bot API Server")
 
 # Initialize FastAPI app
@@ -132,20 +134,18 @@ def require_permission(permission: Permission):
         return rbac_manager.verify_token(token)
     return permission_checker
 
-# Dependency for rate limiting
+# Dependency for rate limiting (per user/IP)
 async def check_rate_limit(request: Request):
     """Check rate limits for the request"""
-    # Get user from token if present
     user_id = None
     if auth_header := request.headers.get("Authorization"):
         try:
             token = auth_header.replace("Bearer ", "")
             payload = rbac_manager.verify_token(token)
             user_id = payload.get('user_id')
-        except:
+        except Exception:
             pass
     
-    # Check user rate limit
     if user_id:
         user_limit = rate_limiter.check_user_rate_limit(
             user_id,
@@ -159,7 +159,6 @@ async def check_rate_limit(request: Request):
                 headers={"Retry-After": str(settings.RATE_LIMIT_WINDOW)}
             )
     
-    # Check IP rate limit
     client_ip = request.client.host
     ip_limit = rate_limiter.check_ip_rate_limit(
         client_ip,
@@ -238,10 +237,9 @@ async def review_code(
                 )
         
         try:
-            # Perform review (simplified)
+            # Perform review (simplified placeholder logic)
             review_counter.inc()
             
-            # Here you would call your actual review logic
             result = {
                 "status": "success",
                 "language": language,
