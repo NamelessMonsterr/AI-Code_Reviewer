@@ -1,4 +1,4 @@
-import openai
+from openai import OpenAI
 import json
 import os
 from typing import List, Dict
@@ -9,7 +9,9 @@ class ModelFineTuner:
     
     def __init__(self):
         self.api_key = os.getenv('OPENAI_API_KEY')
-        openai.api_key = self.api_key
+        if not self.api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+        self.client = OpenAI(api_key=self.api_key)
         self.training_data = []
     
     def collect_training_data(self, code_review: Dict):
@@ -42,15 +44,15 @@ class ModelFineTuner:
     def upload_training_file(self, file_path: str) -> str:
         """Upload training file to OpenAI"""
         with open(file_path, 'rb') as f:
-            response = openai.File.create(
+            response = self.client.files.create(
                 file=f,
                 purpose='fine-tune'
             )
-        return response['id']
+        return response.id
     
     def start_fine_tuning(self, file_id: str, model='gpt-3.5-turbo') -> str:
         """Start fine-tuning job"""
-        response = openai.FineTuningJob.create(
+        response = self.client.fine_tuning.jobs.create(
             training_file=file_id,
             model=model,
             hyperparameters={
@@ -59,20 +61,20 @@ class ModelFineTuner:
                 "learning_rate_multiplier": 0.1
             }
         )
-        return response['id']
+        return response.id
     
     def check_fine_tuning_status(self, job_id: str) -> Dict:
         """Check status of fine-tuning job"""
-        response = openai.FineTuningJob.retrieve(job_id)
+        response = self.client.fine_tuning.jobs.retrieve(job_id)
         return {
-            'status': response['status'],
-            'trained_tokens': response.get('trained_tokens', 0),
-            'fine_tuned_model': response.get('fine_tuned_model', None)
+            'status': response.status,
+            'trained_tokens': getattr(response, 'trained_tokens', 0),
+            'fine_tuned_model': getattr(response, 'fine_tuned_model', None)
         }
     
     def use_fine_tuned_model(self, model_id: str, code: str) -> str:
         """Use fine-tuned model for code review"""
-        response = openai.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model=model_id,
             messages=[
                 {"role": "user", "content": f"Review this code:\n{code}"}
@@ -108,7 +110,6 @@ class ModelFineTuner:
     
     def _compare_reviews(self, review1: str, review2: str) -> bool:
         """Compare two reviews for similarity"""
-        # Simple comparison - in production, use semantic similarity
         keywords = ['issue', 'error', 'warning', 'fix', 'improve']
         review1_lower = review1.lower()
         review2_lower = review2.lower()
