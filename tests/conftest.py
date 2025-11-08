@@ -1,42 +1,49 @@
 import pytest
-import os
-from pathlib import Path
+import asyncio
+from typing import Generator
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.main import app
+from app.database import Base, get_db
+
+# Test database
+SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base.metadata.create_all(bind=engine)
+
+def override_get_db():
+    try:
+        db = TestingSessionLocal()
+        yield db
+    finally:
+        db.close()
+
+app.dependency_overrides[get_db] = override_get_db
 
 @pytest.fixture(scope="session")
-def test_data_dir():
-    """Create temporary test data directory"""
-    test_dir = Path("tests/data")
-    test_dir.mkdir(parents=True, exist_ok=True)
-    yield test_dir
-    # Cleanup after tests
-    import shutil
-    shutil.rmtree(test_dir, ignore_errors=True)
+def event_loop():
+    """Create an instance of the default event loop for the test session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
 @pytest.fixture
-def sample_code():
-    """Sample code for testing"""
-    return """
-def calculate_sum(a, b):
-    return a + b
-
-def main():
-    result = calculate_sum(5, 3)
-    print(result)
-"""
+def client():
+    return TestClient(app)
 
 @pytest.fixture
-def sample_issue():
-    """Sample code issue"""
+def test_user():
     return {
-        'type': 'security',
-        'severity': 'high',
-        'message': 'Potential SQL injection',
-        'line': 42
+        "email": "test@example.com",
+        "password": "testpassword123"
     }
-
-@pytest.fixture(autouse=True)
-def setup_env_vars(monkeypatch):
-    """Set up environment variables for tests"""
-    monkeypatch.setenv("JWT_SECRET", "test_secret_key_at_least_32_chars_long_12345")
-    monkeypatch.setenv("OPENAI_API_KEY", "test_key")
-    monkeypatch.setenv("CLAUDE_API_KEY", "test_key")
