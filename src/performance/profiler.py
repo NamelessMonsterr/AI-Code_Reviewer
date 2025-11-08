@@ -1,4 +1,4 @@
-import openai
+from openai import OpenAI
 import os
 from typing import Dict, List
 
@@ -7,7 +7,9 @@ class PerformanceProfiler:
     
     def __init__(self):
         self.api_key = os.getenv('OPENAI_API_KEY')
-        openai.api_key = self.api_key
+        if not self.api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+        self.client = OpenAI(api_key=self.api_key)
     
     def analyze_performance(self, code: str, language: str) -> Dict:
         """Analyze code for performance issues"""
@@ -23,7 +25,7 @@ Identify:
 5. Memory leaks
 6. N+1 query problems (if database code)"""
         
-        response = openai.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model='gpt-4',
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.2
@@ -48,7 +50,7 @@ For each optimization provide:
 3. Performance improvement (estimated %)
 4. Trade-offs"""
         
-        response = openai.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model='gpt-4',
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.2,
@@ -84,7 +86,6 @@ For each optimization provide:
         patterns = antipatterns.get(language.lower(), [])
         
         for pattern in patterns:
-            # Simple check - in production, use AST analysis
             if self._check_pattern(code, pattern):
                 detected.append(pattern)
         
@@ -97,11 +98,9 @@ For each optimization provide:
     
     def _parse_optimizations(self, text: str) -> List[Dict]:
         """Parse optimization suggestions"""
-        # Simple parsing - in production, use structured output
         return [{'optimization': text}]
     
     def _check_pattern(self, code: str, pattern: str) -> bool:
         """Check if anti-pattern exists in code"""
-        # Simplified check
         keywords = pattern.lower().split()
         return any(kw in code.lower() for kw in keywords[:2])
