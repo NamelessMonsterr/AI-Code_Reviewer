@@ -1,0 +1,32 @@
+name: Docker Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 3 * * *'  # Daily at 3 AM
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Build Docker image
+        run: docker build -t ai-review-bot:test .
+      
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'ai-review-bot:test'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+      
+      - name: Run Snyk scan
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: ai-review-bot:test
+          args: --severity-threshold=high
