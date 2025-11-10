@@ -3,7 +3,7 @@ fastapi==0.108.0
 uvicorn[standard]==0.25.0
 pydantic==2.5.3
 pydantic-settings==2.1.0
-python-multipart==0.0.6
+python-multipart==0.0.18
 python-dotenv==1.0.0
 
 # AI Providers
@@ -21,9 +21,9 @@ psycopg2-binary==2.9.9
 redis==5.0.1
 
 # Security
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.4.0
 passlib[bcrypt]==1.7.4
-cryptography==41.0.7
+cryptography==42.0.4
 pyjwt==2.8.0
 
 # Version Control
@@ -35,3 +35,4 @@ pyyaml==6.0.1
 aiofiles==23.2.1
 httpx==0.25.2
 requests==2.31.0
+
