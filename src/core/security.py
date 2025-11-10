@@ -9,6 +9,7 @@ from app.core.config import settings
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
+
 class AuthHandler:
     def __init__(self):
         self.secret = settings.jwt_secret
@@ -23,9 +24,9 @@ class AuthHandler:
 
     def encode_token(self, user_id: str) -> str:
         payload = {
-            'exp': datetime.utcnow() + timedelta(minutes=self.access_token_expire_minutes),
-            'iat': datetime.utcnow(),
-            'sub': user_id
+            "exp": datetime.utcnow() + timedelta(minutes=self.access_token_expire_minutes),
+            "iat": datetime.utcnow(),
+            "sub": user_id,
         }
         return jwt.encode(payload, self.secret, algorithm=self.algorithm)
 
@@ -35,5 +36,6 @@ class AuthHandler:
             return payload
         except JWTError:
             raise HTTPException(status_code=401, detail="Invalid token")
+
 
 auth_handler = AuthHandler()

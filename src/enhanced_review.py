@@ -1,8 +1,10 @@
-import os, time
+import os
+import time
 from security.security_scanner import SecurityScanner
 from languages.language_detector import LanguageDetector
 from autofix.code_fixer import CodeFixer
 from analytics.metrics_tracker import MetricsTracker
+
 
 class EnhancedReview:
     def run(self, repo):
@@ -14,8 +16,9 @@ class EnhancedReview:
         report = sc.generate_security_report(repo)
         # Basic example fix -- integrate as needed
         # fix = cf.generate_fix(some_code, some_issue, langs[0])
-        mt.record_review(1, len(report.get('bandit',[])), langs, 0.1)
+        mt.record_review(1, len(report.get("bandit", [])), langs, 0.1)
         print(report)
+
 
 if __name__ == "__main__":
     EnhancedReview().run(".")

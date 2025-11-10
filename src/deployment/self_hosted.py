@@ -2,12 +2,13 @@ import docker
 import yaml
 from typing import Dict
 
+
 class SelfHostedDeployment:
     """Deploy and manage self-hosted instances"""
-    
+
     def __init__(self):
         self.docker_client = docker.from_env()
-    
+
     def generate_docker_compose(self) -> str:
         """Generate Docker Compose configuration"""
         compose = """
@@ -29,7 +30,7 @@ services:
     restart: unless-stopped
     networks:
       - review-network
-  
+
   postgres:
     image: postgres:14
     container_name: review-bot-db
@@ -41,7 +42,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - review-network
-  
+
   redis:
     image: redis:7-alpine
     container_name: review-bot-cache
@@ -59,7 +60,7 @@ networks:
     driver: bridge
 """
         return compose
-    
+
     def generate_kubernetes_config(self) -> str:
         """Generate Kubernetes deployment config"""
         k8s_config = """
@@ -112,7 +113,7 @@ spec:
   type: LoadBalancer
 """
         return k8s_config
-    
+
     def deploy_with_docker(self):
         """Deploy using Docker"""
         dockerfile = """
@@ -130,9 +131,9 @@ EXPOSE 8080
 
 CMD ["python", "-m", "src.api.server"]
 """
-        with open('Dockerfile', 'w') as f:
+        with open("Dockerfile", "w") as f:
             f.write(dockerfile)
-        
+
         # Build image
-        image, logs = self.docker_client.images.build(path='.', tag='ai-review-bot:latest')
+        image, logs = self.docker_client.images.build(path=".", tag="ai-review-bot:latest")
         return image
