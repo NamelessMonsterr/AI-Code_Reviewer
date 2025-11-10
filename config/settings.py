@@ -1,5 +1,5 @@
-from pydantic import BaseSettings, validator, Field
-from typing import Optional, List
+from pydantic_settings import BaseSettings
+from pydantic import validator, Fieldfrom typing import Optional, List
 import os
 
 class Settings(BaseSettings):
