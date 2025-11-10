@@ -32,16 +32,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install flake8 black mypy pylint
-          pip install -r requirements.txt || true
+          pip install -r requirements.txt 
       
       - name: Run Black
-        run: black --check src/ tests/ || true
+        run: black --check src/ tests/ 
       
       - name: Run Flake8
-        run: flake8 src/ tests/ --max-line-length=120 --exclude=__pycache__ --exit-zero
+        run: flake8 src/ tests/ --max-line-length=120 --exclude=__pycache__ 
       
       - name: Run Pylint
-        run: pylint src/ --disable=C0111,R0903 --max-line-length=120 --exit-zero
+        run: pylint src/ --disable=C0111,R0903 --max-line-length=120
       
       - name: Run MyPy
         run: mypy src/ --ignore-missing-imports --no-strict-optional
@@ -62,10 +62,10 @@ jobs:
         run: npm ci || npm install
       
       - name: Run ESLint
-        run: npm run lint || echo "ESLint warnings found"
+        run: npm run lint
       
       - name: Run TypeScript compiler
-        run: npm run build || echo "TypeScript compilation warnings"
+        run: npm run build
 
   # ==================== SECURITY SCANNING ====================
   security-scan:
