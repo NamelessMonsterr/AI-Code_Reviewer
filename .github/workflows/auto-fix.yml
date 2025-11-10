@@ -1,0 +1,36 @@
+name: Auto-fix Code Quality
+
+on:
+  workflow_dispatch:
+
+jobs:
+  auto-fix:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install formatters
+        run: |
+          pip install black flake8 pylint autopep8
+      
+      - name: Format Python code with Black
+        run: |
+          black src/ tests/ config/ || true
+      
+      - name: Auto-fix with autopep8
+        run: |
+          autopep8 --in-place --recursive --aggressive --aggressive src/ tests/ config/ || true
+      
+      - name: Commit changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git diff --quiet && git diff --staged --quiet || git commit -m "Auto-fix: Format code with Black and autopep8"
+          git push
